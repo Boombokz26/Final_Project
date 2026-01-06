@@ -15,7 +15,7 @@ Zdrojové dáta pochádzajú z Snowflake datasetu dostupného [tu](https://app.s
 
 Účelom ELT procesu bolo tieto dáta pripraviť, transformovať a sprístupniť pre viacdimenzionálnu analýzu.
 
-# 1.1 Dátová architektúra
+### 1.1 Dátová architektúra
 
 # ERD diagram
 
@@ -44,7 +44,40 @@ V ukážke bola navrhnutá schéma hviezdy (star schema) podľa Kimballovej meto
 </p>
 
 ***
-#3 ELT proces v Snowflake
+# 3. ELT proces v Snowflake
+
+ETL proces pozostáva z troch hlavných fáz: extrahovanie (Extract), načítanie (Load) a transformácia (Transform). Tento proces bol implementovaný v Snowflake s cieľom pripraviť zdrojové dáta zo staging vrstvy do viacdimenzionálneho modelu vhodného na analýzu a vizualizáciu.
+***
+
+### 3.1 Extract (Extrahovanie dát)
+Dáta zo zdrojového datasetu (formát .csv) boli najprv nahraté do Snowflake prostredníctvom interného stage úložiska s názvom STAGE_STATING. Stage v Snowflake slúži ako dočasné úložisko na import alebo export dát. Vytvorenie stage bolo zabezpečené príkazom:
+
+<strong>Príklad kódu:</strong>
+```sql
+CREATE OR REPLACE STAGE STAGE_STATING;
+```
+***
+
+### 3.2 Load (Načítanie dát)
+Do stage boli následne nahraté súbory obsahujúce údaje o cenových hodnoteniach chemických komodít. Dáta zahŕňajú metadáta o produktoch, regiónoch, menách, obchodných a logistických podmienkach, ako aj časové atribúty a cenové metriky (assessment low, mid a high), ktoré slúžia ako základ pre analytické spracovanie v dátovom sklade.
+Dáta boli importované do staging tabuliek pomocou príkazu COPY INTO. Pre každú tabuľku sa použil podobný príkaz:
+
+<strong>Príklad kódu:</strong>
+```sql
+COPY INTO chemical_price_assessments_staging
+FROM '@STAGE_STATING/Chemical Price Assessments - Examples_2026-01-04-1315.csv'
+FILE_FORMAT = my_csv_format
+ON_ERROR = 'ABORT_STATEMENT';
+```
+V prípade nesprávnych záznamov bol použitý parameter `ON_ERROR = 'ABORT_STATEMENT'`, ktorý okamžite preruší proces načítania údajov a zabráni vloženiu nesprávnych záznamov do cieľovej tabuľky.
+***
+
+### 3.3 Transfor (Transformácia dát)
+V tejto fáze boli dáta zo staging tabuliek vyčistené, transformované a obohatené. Hlavným cieľom bolo pripraviť dimenzie a faktovú tabuľku, ktoré umožnia jednoduchú a efektívnu analýzu.
+
+
+
+
 ***
 #4 Vizualizácia dát
 Dashboard obsahuje `11 vizualizácií`,ktorý poskytuje základný prehľad kľúčových ukazovateľov a trendov týkajúcich sa surovín a chemických výrobkov. Tieto vizualizácie odpovedajú na dôležité otázky a umožňujú lepšie pochopiť trh so surovinami a chemickými výrobkami a ich trendy.
