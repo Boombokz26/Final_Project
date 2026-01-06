@@ -22,7 +22,9 @@ Zdrojové dáta pochádzajú z Snowflake datasetu dostupného [tu](https://app.s
 Surové dáta sú usporiadané v relačnom modeli, ktorý je znázornený na entitno-relačnom diagrame (ERD):
 
 ![5395643886870401602](https://github.com/user-attachments/assets/a60b94a1-ca98-4485-aec9-efaa9e1fea75)
-***
+<p align="center">
+  <em>Obrázok 1 Entitno-relačná schéma Chemical Price Assessments</em>
+</p>
 
 # 2 Dimenzionálny model
 
