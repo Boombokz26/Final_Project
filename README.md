@@ -1,7 +1,8 @@
 # ELT proces datasetu Chemical Price Assessments
 Tento repozitár predstavuje ukážkovú implementáciu ELT procesu v Snowflake a vytvorenie dátového skladu so schémou Star Schema. Projekt pracuje s Chemical Price Assessments datasetom. Projekt je zameraný na štúdium trhu so surovinami a chemickými výrobkami na základe cenových odhadov ICIS za určité obdobie. Výsledný dátový model umožňuje multidimenzionálnu analýzu a vizualizáciu kľúčových metrik.
 
-# 1. V tomto príklade analyzujeme cenové a trhové údaje o surovinách a chemických výrobkoch. Cieľom je porozumieť:
+# 1. Úvod a popis zdrojových dát
+V tomto príklade analyzujeme cenové a trhové údaje o surovinách a chemických výrobkoch. Cieľom je porozumieť:
 - Ako sa menia ceny
 - Ktoré výrobky sú najdrahšie
 - Aké sú najvolatilnejšie
