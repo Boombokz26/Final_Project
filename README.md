@@ -26,6 +26,7 @@ Surové dáta sú usporiadané v relačnom modeli, ktorý je znázornený na ent
   <em>Obrázok 1 Entitno-relačná schéma Chemical Price Assessments</em>
 </p>
 
+***
 # 2 Dimenzionálny model
 
 V ukážke bola navrhnutá schéma hviezdy (star schema) podľa Kimballovej metodológie, ktorá obsahuje 1 tabuľku faktov FACT_PRICE, ktorá je prepojená s nasledujúcimi 7 dimenziami:
@@ -38,6 +39,10 @@ V ukážke bola navrhnutá schéma hviezdy (star schema) podľa Kimballovej meto
 - `DIM_LOCATION`: Obsahuje informácie o geografickej lokalite (názov lokality, typ lokality).
 
 ![5390944595648122413](https://github.com/user-attachments/assets/583245a2-bae6-422e-8817-1be43779099c)
+<p align="center">
+  <em>Obrázok 2 Schéma hviezdy pre Chemical Price Assessments</em>
+</p>
+
 ***
 #3 ELT proces v Snowflake
 ***
