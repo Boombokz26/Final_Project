@@ -33,5 +33,38 @@ V ukážke bola navrhnutá schéma hviezdy (star schema) podľa Kimballovej meto
 - `DIM_TRADE`: Obsahuje obchodné a kontraktačné podmienky hodnotenia cien(obchodné podmienky, typ transakcie, spôsob kotácie, dodacia lehota, kontraktné obdobie, typ delty).
 - `DIM_LOCATION`: Obsahuje informácie o geografickej lokalite (názov lokality, typ lokality).
 
-
+![5390944595648122413](https://github.com/user-attachments/assets/583245a2-bae6-422e-8817-1be43779099c)
+***
+#3 ELT proces v Snowflake
+***
+#4 Vizualizácia dát
+Dashboard obsahuje `11 vizualizácií`,ktorý poskytuje základný prehľad kľúčových ukazovateľov a trendov týkajúcich sa surovín a chemických výrobkov. Tieto vizualizácie odpovedajú na dôležité otázky a umožňujú lepšie pochopiť trh so surovinami a chemickými výrobkami a ich trendy.
+***
+# Graf 1: Najpopulárnejší čas doručenia
+Táto vizualizácia ukazuje najpopulárnejší čas doručenia. Umožňuje určiť, kedy sa tovar najčastejšie dodáva kupujúcemu. Graf ukazuje, že najobľúbenejším termínom dodania je približne jeden mesiac. Tieto údaje môžu byť užitočné pri plánovaní logistiky, tvorbe cenovej stratégie a optimalizácii prevádzkových procesov.
+```sql
+select
+  tr.DELIVERY_TIMEFRAME,
+  count(*) as CNT
+from FACT_PRICE f
+left join DIM_TRADE tr on tr.TRADE_ID = f.TRADE_ID
+where tr.DELIVERY_TIMEFRAME is not null
+group by 1
+order by CNT desc;
+```
+<img width="1347" height="556" alt="graf1" src="https://github.com/user-attachments/assets/dce1049f-bfbd-46c8-8ae4-16bbe87ce856" />
+***
+# Graf 2: Najpopulárnejší čas doručenia
+Táto vizualizácia zobrazuje najbežnejšie podmienky zmlúv. Z údajov je zrejmé, že najbežnejšou podmienkou zmluvy je FOB. Tieto údaje môžu byť užitočné pre analýzu trhových štandardov, optimalizáciu zmluvných podmienok a prijímanie rozhodnutí v oblasti logistiky a cenotvorby.
+```sql
+select
+  tr.TRADE_TERMS,
+  count(*) as CNT
+from FACT_PRICE f
+left join DIM_TRADE tr
+  on tr.TRADE_ID = f.TRADE_ID
+where tr.TRADE_TERMS is not null
+group by tr.TRADE_TERMS
+order by CNT desc;
+```
 
