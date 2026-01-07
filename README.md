@@ -75,10 +75,291 @@ V prípade nesprávnych záznamov bol použitý parameter `ON_ERROR = 'ABORT_STA
 ### 3.3 Transfor (Transformácia dát)
 V tejto fáze boli dáta zo staging tabuliek vyčistené, transformované a obohatené. Hlavným cieľom bolo pripraviť dimenzie a faktovú tabuľku, ktoré umožnia jednoduchú a efektívnu analýzu.
 
+### 3.3.1
 
+Dimenzie boli navrhnuté na poskytnutie kontextu faktovej tabuľke. Dimenzia DIM_COMMODITY obsahuje informácie o chemickom produkte, ktorý hodnotíme. Táto tabuľka má tiež určitú hierarchiu, ktorá sa delí na samotný hodnotený tovar → rodičovský tovar → tovar‑predok, ktoré používame na hodnotenie ceny. Transformácia zahŕňala vyhýbanie sa duplicite textových údajov, zachovanie hierarchie tovarov a tiež možnosť analýzy na rôznych úrovniach agregácie (tovar → skupina → podskupina). Táto dimenzia je realizovaná ako SCD typu 0, čo je statické riešenie, keďže v našom datasete sú údaje stabilné a nevyžadujú historické zmeny. V tomto datasete je klasifikácia tovarov stabilná. V reálnom prípade by táto tabuľka bola s najväčšou pravdepodobnosťou typu SCD typu 2, avšak ide len o možné použitie.
 
+Príklad kódu:
 
+```sql
+create or replace table DIM_COMMODITY as
+select distinct
+    commodity_id::varchar(60)                   as COMMODITY_ID,
+    commodity::varchar(60)                      as COMMODITY_,
+    commodity_p1_id::varchar(60)                as COMMODITY_P1_ID,
+    commodity_p1::varchar(60)                   as COMMODITY_P1,
+    commodity_p2_id::varchar(60)                as COMMODITY_P2_ID,
+    commodity_p2::varchar(60)                   as COMMODITY_P2
+    
+from GECKO_DB.SHEMA_CHEMICAL_PRICE_ASSESSMENTS_STATING.chemical_price_assessments_staging;
+```
 ***
+
+### 3.3.2
+
+Dimenzia DIM_TIME bola navrhnutá ako bežný „kalendár“ alebo časová dimenzná tabuľka. Bola vytvorená s cieľom odpovedať na otázku: „kedy bola cena zaznamenaná?“. Dôležitou súčasťou je aj to, že táto tabuľka transformuje „jednoduchý dátum“ z poľa created_for, kde created_for nie je NULL, na kalendárne atribúty, ktoré je následne možné pohodlne využívať v analytike. Obsahuje odvodené atribúty, ako sú deň, mesiac (v číselnom aj textovom formáte), rok a štvrťrok. Štruktúra tejto dimenzie umožňuje vykonávať časovú analýzu, najmä analýzu hodnotenia chemických tovarov podľa dní, mesiacov alebo rokov.
+
+V tejto tabuľke je typ SCD klasifikovaný ako SCD 0, existujúce záznamy sú nemenné a uchovávajú statické informácie, pričom hodnota „kalendár“ sa historicky nemení (deň/mesiac/rok sú vždy rovnaké). V prípade potreby sledovania zmien súvisiacich s odvodenými atribútmi (napríklad pracovné dni a sviatky) by bolo možné prehodnotiť klasifikáciu na SCD typu 1 (aktualizácia hodnôt) alebo SCD typu 2 (uchovávanie histórie zmien). V aktuálnom modeli takáto potreba neexistuje, preto je dimenzia DIM_TIME realizovaná ako SCD typu 0 s možnosťou rozšírenia o nové záznamy podľa potreby.
+
+Príklad kódu:
+
+```sql
+create or replace table DIM_TIME as 
+select distinct 
+    to_number(to_char(created_for, 'YYYYMMDD')) as TIME_ID,
+    extract(day from created_for)               as DAY,
+    extract(month from created_for)             as MONTH,
+    to_char(created_for, 'MMMM')                as MONTH_NAME,
+    'Q' || extract(quarter from created_for)    as QUARTER,
+    extract(year from created_for)              as YEAR
+    
+from GECKO_DB.SHEMA_CHEMICAL_PRICE_ASSESSMENTS_STATING.chemical_price_assessments_staging
+where created_for is not null;
+```
+***
+
+### 3.3.3
+
+Dimenzia DIM_METRICS je dimenznou tabuľkou a uchováva informácie o mene a merných jednotkách cien.
+Táto dimenzia uchováva atribúty currency, currency_code, currency_symbol, measure_unit, measure_unit_symbol. Patrí do typu SCD 0, ktorý je taktiež statický, pričom mena a merné jednotky sa v rámci datasetu historicky nemenia. Štruktúra tejto dimenzie umožňuje vykonávať multimenové a viacrozmerné analýzy.
+Zabezpečuje správnu interpretáciu číselných hodnôt vo faktovej tabuľke.
+
+Príklad kódu:
+
+```sql
+INSERT INTO DIM_METRICS (CURRENCY, CURRENCY_CODE, CURRENCY_SYMBOL, MEASURE_UNIT, MEASURE_UNIT_SYMBOL)
+select distinct
+    currency::varchar(100)                as CURRENCY,
+    currency_code::varchar(20)            as CURRENCY_CODE,
+    currency_symbol::varchar(20)          as CURRENCY_SYMBOL,
+    measure_unit::varchar(50)             as MEASURE_UNIT,
+    measure_unit_symbol::varchar(20)      as MEASURE_UNIT_SYMBOL
+    
+from GECKO_DB.SHEMA_CHEMICAL_PRICE_ASSESSMENTS_STATING.chemical_price_assessments_staging;
+```
+Dôležitá poznámka: v tomto projekte sme najprv vytvorili prázdnu tabuľku, v ktorej sa ID generovalo automaticky, keďže v datasete neboli použité žiadne špeciálne ID.
+
+Príklad kódu:
+
+```sql
+create or replace table DIM_METRICS (
+    CURRENCY_ID  INT autoincrement start 1 primary key,
+    CURRENCY varchar(100),              
+    CURRENCY_CODE varchar(20),          
+    CURRENCY_SYMBOL varchar(20),        
+    MEASURE_UNIT varchar(50),           
+    MEASURE_UNIT_SYMBOL varchar(20)
+);
+```
+***
+
+### 3.3.4
+
+Dimenzia DIM_SERIES je tabuľka, ktorá opisuje sériu cenových hodnotení a odpovedá na väčšinu biznis otázok: „Čo je to za séria? Kto ju vytvára? Ako a s akou frekvenciou sa publikuje? Je aktívna alebo ukončená?“. Uchováva atribúty series_name, originator, price_item_type, publish_status, launch_date, start_date, end_date, terminated, frequency. Tieto atribúty sa nenachádzajú vo faktovej tabuľke, pretože sa opakujú pre všetky záznamy danej série.
+V našej implementácii je táto tabuľka typu SCD 0, avšak v reálnych prípadoch je najčastejšie typu SCD typu 2, aby sa uchovávala história zmien stavu a frekvencie.
+
+Príklad kódu: 
+
+```sql
+create or replace table DIM_SERIES as 
+select distinct 
+    series_key::varchar(50)             as SERIES_KEY,
+    originator::varchar(25)             as ORIGINATOR,
+    series_name::varchar                as SERIES_NAME,
+    price_item_type::varchar(30)        as PRICE_ITEM_TYPE,
+    publish_status::varchar(30)         as PUBLISH_STATUS,
+    LAUNCH_DATE::date                   as LAUNCH_DATE,
+    START_DATE::date                    as START_DATE,
+    end_date::date                      as END_DATE,
+    terminated::boolean                 as TERMINATED,
+    frequency::varchar(20)              as FREQUENCY
+    
+from GECKO_DB.SHEMA_CHEMICAL_PRICE_ASSESSMENTS_STATING.chemical_price_assessments_staging;
+```
+***
+
+### 3.3.5
+
+Dimenzia DIM_LOCATION je dimenzná tabuľka, ktorá opisuje geografické miesto cenovej kategórie. Má iba dva atribúty: location a location_type.
+Umožňuje analyzovať regionálne rozdiely cien a porovnávať trhy medzi sebou.
+Taktiež má typ SCD 0, keďže nie je historicky meniteľná.
+
+```sql
+create or replace table DIM_LOCATION as
+select distinct
+    location_id::varchar      as LOCATION_ID,
+    location::varchar         as LOCATION,
+    location_type::varchar    as LOCATION_TYPE
+    
+from GECKO_DB.SHEMA_CHEMICAL_PRICE_ASSESSMENTS_STATING.chemical_price_assessments_staging;
+
+```
+***
+
+### 3.3.6
+
+Dimenzia DIM_LOGISTIC – táto tabuľka opisuje logistický kontext dodávky, pre ktorý sa vytvára cena. Táto tabuľka existuje na to, aby bolo možné analyzovať ceny v závislosti od dopravy a rôznych typov dodávok. Uchováva atribúty factory, transport, transport_type.
+Táto tabuľka má taktiež typ SCD 0.
+
+Príklad kódu: 
+
+```sql
+insert into DIM_LOGISTIC (FACTORY, TRANSPORT, TRANSPORT_TYPE)
+select distinct
+    factory::varchar(200),
+    transport::varchar(100),
+    transport_type::varchar(100)
+
+from GECKO_DB.SHEMA_CHEMICAL_PRICE_ASSESSMENTS_STATING.chemical_price_assessments_staging;
+```
+Dôležitá poznámka: v tomto projekte sme najprv vytvorili prázdnu tabuľku, v ktorej sa ID generovalo automaticky, keďže v datasete neboli použité žiadne špeciálne ID.
+
+Príklad kódu: 
+
+```sql
+create or replace table DIM_LOGISTIC (
+    LOGISTIC_ID    INT autoincrement start 1 primary key,
+    FACTORY        varchar(200),
+    TRANSPORT      varchar(100),
+    TRANSPORT_TYPE varchar(100)
+);
+```
+***
+
+### 3.3.7
+
+Dimenzia DIM_TRADE je tabuľka, ktorá opisuje obchodné a zmluvné podmienky, za ktorých sa vytvára cena. Táto tabuľka umožňuje vykonávať analýzu dynamiky cien a oddeliť komerčný kontext od faktických hodnôt.
+Taktiež má typ SCD 0.
+
+Príklad kódu:
+
+```sql
+INSERT INTO DIM_TRADE (TRADE_TERMS, TRADE_TERMS_DESCRIPTION, TRANSACTION_TYPE, QUOTE_APPROACH, QUOTE_MEASUREMENT_STYLE, DELIVERY_TIMEFRAME, CONTRACT_PERIOD, DELTA_TYPE)
+select distinct
+    trade_terms::varchar(50)               as TRADE_TERMS,
+    trade_terms_description::varchar(200)  as TRADE_TERMS_DESCRIPTION,
+    transaction_type::varchar(100)         as TRANSACTION_TYPE,
+    quote_approach::varchar(200)           as QUOTE_APPROACH,
+    quote_measurement_style::varchar(200)  as QUOTE_MEASUREMENT_STYLE,
+    delivery_timeframe::varchar(150)       as DELIVERY_TIMEFRAME,
+    contract_period::varchar(50)           as CONTRACT_PERIOD,
+    delta_type::varchar(200)               as DELTA_TYPE
+    
+from GECKO_DB.SHEMA_CHEMICAL_PRICE_ASSESSMENTS_STATING.chemical_price_assessments_staging;
+```
+Dôležitá poznámka: v tomto projekte sme najprv vytvorili prázdnu tabuľku, v ktorej sa ID generovalo automaticky, keďže v datasete neboli použité žiadne špeciálne ID.
+
+Príklad kódu:
+
+```sql
+create or replace table DIM_TRADE (
+    TRADE_ID INT autoincrement start 1 primary key,
+    TRADE_TERMS varchar(50),
+    TRADE_TERMS_DESCRIPTION varchar(200),
+    TRANSACTION_TYPE varchar(100),
+    QUOTE_APPROACH varchar(200),
+    QUOTE_MEASUREMENT_STYLE varchar(200),
+    DELIVERY_TIMEFRAME varchar(150),
+    CONTRACT_PERIOD varchar(50),
+    DELTA_TYPE varchar(200)                
+); 
+```
+***
+
+### 3.3.8
+
+FACT_PRICE uchováva cenové hodnotenia ako udalosti, ktoré sú viazané na konkrétnu sériu, tovar, lokalitu, čas a obchodné podmienky.
+Tabuľka obsahuje kľúčové cenové metriky a vypočítané ukazovatele dynamiky, ktoré umožňujú analyzovať trendy, volatilitu a zmeny cien v čase. Je centrálnym prvkom schémy typu star schema.
+Taktiež sme v tejto tabuľke pridali niekoľko okenných funkcií:
+1. RN_IN_SERIES (row_number) – čísluje záznamy v rámci každej series_key.
+2. PREV_MID (lag) – pre každý záznam berie predchádzajúcu hodnotu MID ceny v rovnakej sérii.
+3. MID_CHANGE (rozdiel oproti predchádzajúcej) – vypočítava absolútnu zmenu MID ceny medzi aktuálnym a predchádzajúcim záznamom v rámci série.
+
+Príklad kódu:
+```sql
+create or replace table FACT_PRICE as
+select
+    s.key::varchar(50)                              as KEY,
+    s.series_key::varchar(50)                       as SERIES_KEY,
+
+    to_number(to_char(s.created_for,'YYYYMMDD'))    as TIME_ID,
+    s.created_for::date                             as CREATED_FOR,
+    s.released_on::timestamp_ntz                    as RELEASED_ON,
+
+    s.commodity_id::varchar(60)                     as COMMODITY_ID,
+    s.location_id::varchar                          as LOCATION_ID,
+ 
+    lg.LOGISTIC_ID                                  as LOGISTIC_ID,
+    tr.TRADE_ID                                     as TRADE_ID,
+    m.CURRENCY_ID                                   as CURRENCY_ID,
+
+    s.is_estimated                                  as IS_ESTIMATED,
+
+    s.assessment_high_precision                     as ASSESSMENT_HIGH_PRECISION,
+    s.assessment_high_delta_precision               as ASSESSMENT_HIGH_DELTA_PRECISION,
+    s.assessment_low_precision                      as ASSESSMENT_LOW_PRECISION,
+    s.assessment_low_delta_precision                as ASSESSMENT_LOW_DELTA_PRECISION,
+    s.mid_precision                                 as MID_PRECISION,
+    s.mid_delta_precision                           as MID_DELTA_PRECISION,
+
+    s.assessment_low::number(18,5)                  as ASSESSMENT_LOW,
+    s.assessment_low_delta::number(18,5)            as ASSESSMENT_LOW_DELTA,
+    s.assessment_mid::number(18,5)                  as ASSESSMENT_MID,
+    s.assessment_mid_delta::number(18,5)            as ASSESSMENT_MID_DELTA,
+    s.assessment_high::number(18,5)                 as ASSESSMENT_HIGH,
+    s.assessment_high_delta::number(18,5)           as ASSESSMENT_HIGH_DELTA,
+
+    row_number() over (
+     partition by s.series_key
+     order by s.created_for desc, s.released_on desc
+     ) as RN_IN_SERIES,
+
+    lag(s.assessment_mid::number(18,5)) over (
+     partition by s.series_key
+     order by s.created_for
+     ) as PREV_MID,
+
+    (s.assessment_mid::number(18,5)
+    - lag(s.assessment_mid::number(18,5)) over (partition by s.series_key order by s.created_for)
+    ) as MID_CHANGE
+
+
+from GECKO_DB.SHEMA_CHEMICAL_PRICE_ASSESSMENTS_STATING.chemical_price_assessments_staging s
+
+left join DIM_LOGISTIC lg
+  on lg.FACTORY = s.factory
+ and lg.TRANSPORT = s.transport
+ and lg.TRANSPORT_TYPE = s.transport_type
+
+left join DIM_TRADE tr
+  on tr.TRADE_TERMS = s.trade_terms
+ and tr.TRADE_TERMS_DESCRIPTION = s.trade_terms_description
+ and tr.TRANSACTION_TYPE = s.transaction_type
+ and tr.QUOTE_APPROACH = s.quote_approach
+ and tr.QUOTE_MEASUREMENT_STYLE = s.quote_measurement_style
+ and tr.DELIVERY_TIMEFRAME = s.delivery_timeframe
+ and tr.CONTRACT_PERIOD = s.contract_period
+ and tr.DELTA_TYPE = s.delta_type
+
+left join DIM_METRICS m
+  on m.CURRENCY_CODE = s.currency_code
+ and m.MEASURE_UNIT = s.measure_unit
+ and m.CURRENCY_SYMBOL = s.currency_symbol
+ and m.MEASURE_UNIT_SYMBOL = s.measure_unit_symbol;
+```
+
+
+ELT proces v Snowflake umožnil transformovať pôvodné údaje z formátu .csv na viacrozmerný model typu „hviezda“. Tento proces zahŕňal čistenie, obohatenie a reorganizáciu údajov. Výsledný model zabezpečuje možnosť analýzy čitateľských preferencií a správania používateľov a slúži ako základ pre tvorbu vizualizácií a reportov.
+
+Po úspešnom vytvorení dimenzií a faktovej tabuľky boli údaje nahrané do finálnej štruktúry. Na záver boli staging tabuľky odstránené s cieľom optimalizácie využitia úložiska.
+
+Príklad kódu:
+
+```sql
+DROP TABLE IF EXISTS chemical_price_assessments_staging;
+```
+***
+
 #4 Vizualizácia dát
 Dashboard obsahuje `11 vizualizácií`,ktorý poskytuje základný prehľad kľúčových ukazovateľov a trendov týkajúcich sa surovín a chemických výrobkov. Tieto vizualizácie odpovedajú na dôležité otázky a umožňujú lepšie pochopiť trh so surovinami a chemickými výrobkami a ich trendy.
 ***
