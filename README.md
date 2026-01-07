@@ -32,15 +32,17 @@ Zdrojové dáta pochádzajú z Snowflake datasetu dostupného [tu](https://app.s
 # Uvodny diagram
 
 <img width="651" height="914" alt="stating" src="https://github.com/user-attachments/assets/ecb8e344-2241-43d3-83c2-36db06d4e3c7" />
+<p align="center">
+  <em>Obrázok 1 Uvodna schéma Chemical Price Assessments</em>
+</p>
 
-
-# ERD diagram
+# 3NF Diagram
 
 Surové dáta sú usporiadané v relačnom modeli, ktorý je znázornený na entitno-relačnom diagrame (ERD):
 
 ![5395643886870401602](https://github.com/user-attachments/assets/a60b94a1-ca98-4485-aec9-efaa9e1fea75)
 <p align="center">
-  <em>Obrázok 1 Entitno-relačná schéma Chemical Price Assessments</em>
+  <em>Obrázok 2 Entitno-relačná schéma Chemical Price Assessments</em>
 </p>
 
 ***
@@ -57,7 +59,7 @@ V ukážke bola navrhnutá schéma hviezdy (star schema) podľa Kimballovej meto
 
 ![5390944595648122413](https://github.com/user-attachments/assets/583245a2-bae6-422e-8817-1be43779099c)
 <p align="center">
-  <em>Obrázok 2 Schéma hviezdy pre Chemical Price Assessments</em>
+  <em>Obrázok 3 Schéma hviezdy pre Chemical Price Assessments</em>
 </p>
 
 ***
