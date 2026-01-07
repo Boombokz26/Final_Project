@@ -19,7 +19,7 @@ Zdrojové dáta pochádzajú z Snowflake datasetu dostupného [tu](https://app.s
 
 # 1.3 V tomto príklade analyzujeme cenové a trhové údaje o surovinách a chemických výrobkoch. Cieľom je porozumieť:
 - Ako sa menia ceny
-- Ktoré výrobky sú najdrahšie
+- Aké sú hlavné trhy pre predaj tovarov
 - Aké sú najvolatilnejšie
 - Hlavné metódy dodávky tovaru
 - Hlavné spôsoby platby
