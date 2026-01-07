@@ -499,4 +499,7 @@ limit 10;
 ```
 <img width="1388" height="700" alt="graf6" src="https://github.com/user-attachments/assets/e7a5896d-f92d-41fc-b270-103d36415ca5" />
 
+Mená a priezviská tvorcov projektu:
+Ohirchak Viktor
+Sabit Zhaken
 
