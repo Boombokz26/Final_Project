@@ -27,7 +27,7 @@ Zdrojové dáta pochádzajú z Snowflake datasetu dostupného [tu](https://app.s
 
 Účelom ELT procesu bolo tieto dáta pripraviť, transformovať a sprístupniť pre viacdimenzionálnu analýzu.
 
-### 1.4 Dátová architektúra
+# 1.4 Dátová architektúra
 
 # Uvodny diagram
 
