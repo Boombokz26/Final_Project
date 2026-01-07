@@ -1,21 +1,38 @@
-# ELT proces datasetu Chemical Price Assessments
+# ELT proces datasetu Chemical Price Assessments datasetom
 Tento repozitár predstavuje ukážkovú implementáciu ELT procesu v Snowflake a vytvorenie dátového skladu so schémou Star Schema. Projekt pracuje s Chemical Price Assessments datasetom. Projekt je zameraný na štúdium trhu so surovinami a chemickými výrobkami na základe cenových odhadov ICIS za určité obdobie. Výsledný dátový model umožňuje multidimenzionálnu analýzu a vizualizáciu kľúčových metrik.
 
-# 1. Úvod a popis zdrojových dát
-V tomto príklade analyzujeme cenové a trhové údaje o surovinách a chemických výrobkoch. Cieľom je porozumieť:
+# 1 Chemical Price Assessments dataset
+Vybrali sme tento dátový súbor, pretože odráža reálne obchodné procesy súvisiace s analýzou a monitorovaním komoditných trhov a môže byť použitý na podporu rozhodovania v oblasti nákupu, predaja a strategického plánovania. Štruktúra dátového súboru zahŕňa kvantitatívne ukazovatele aj popisné atribúty, čo ho robí vhodným na vytvorenie relačnej databázy.
+
+# 1.1 Podporovaný obchodný proces
+- sledovanie trhových trendov a zmien cien v čase
+- komparatívna analýza trhov, regiónov a obchodných podmienok
+
+# 1.2 Typy údajov v dátovom súbore  
+
+Hlavné typy údajov v tabuľke sú Number, Varchar, Date, Timestamp_NTZ, Variant.
+
+Zdrojové dáta pochádzajú z Snowflake datasetu dostupného [tu](https://app.snowflake.com/marketplace/listing/GZSVZ9FU7N/icis-independent-commodity-intelligence-services-chemical-price-assessments?search=chemical). Dataset obsahuje dve hlavných tabuliek:
+- `CHEMICAL_PRICE_ASSESSMENTS` - Táto tabuľka obsahuje transakčné záznamy pre každé ocenenie ceny vytvorené pre cenovú sériu
+- `CHEMICAL_PRICE_SPECIFICATIONS` - Táto tabuľka obsahuje vysokoúrovňové popisné informácie alebo metadáta o cenových radoch/kotáciách, ktoré pokrýva ICIS. Na každý cenový rad/kotáciu pripadá jeden riadok.
+
+
+# 1.3 V tomto príklade analyzujeme cenové a trhové údaje o surovinách a chemických výrobkoch. Cieľom je porozumieť:
 - Ako sa menia ceny
 - Ktoré výrobky sú najdrahšie
 - Aké sú najvolatilnejšie
 - Hlavné metódy dodávky tovaru
 - Hlavné spôsoby platby
 
-Zdrojové dáta pochádzajú z Snowflake datasetu dostupného [tu](https://app.snowflake.com/marketplace/listing/GZSVZ9FU7N/icis-independent-commodity-intelligence-services-chemical-price-assessments?search=chemical). Dataset obsahuje dve hlavných tabuliek:
-- `CHEMICAL_PRICE_ASSESSMENTS` - Táto tabuľka obsahuje transakčné záznamy pre každé ocenenie ceny vytvorené pre cenovú sériu
-- `CHEMICAL_PRICE_SPECIFICATIONS` - Táto tabuľka obsahuje vysokoúrovňové popisné informácie alebo metadáta o cenových radoch/kotáciách, ktoré pokrýva ICIS. Na každý cenový rad/kotáciu pripadá jeden riadok.
 
 Účelom ELT procesu bolo tieto dáta pripraviť, transformovať a sprístupniť pre viacdimenzionálnu analýzu.
 
-### 1.1 Dátová architektúra
+### 1.4 Dátová architektúra
+
+# Uvodny diagram
+
+<img width="651" height="914" alt="stating" src="https://github.com/user-attachments/assets/ecb8e344-2241-43d3-83c2-36db06d4e3c7" />
+
 
 # ERD diagram
 
@@ -360,8 +377,9 @@ DROP TABLE IF EXISTS chemical_price_assessments_staging;
 ```
 ***
 
-#4 Vizualizácia dát
-Dashboard obsahuje `11 vizualizácií`,ktorý poskytuje základný prehľad kľúčových ukazovateľov a trendov týkajúcich sa surovín a chemických výrobkov. Tieto vizualizácie odpovedajú na dôležité otázky a umožňujú lepšie pochopiť trh so surovinami a chemickými výrobkami a ich trendy.
+# 4 Vizualizácia dát
+
+Dashboard obsahuje `6 vizualizácií`,ktorý poskytuje základný prehľad kľúčových ukazovateľov a trendov týkajúcich sa surovín a chemických výrobkov. Tieto vizualizácie odpovedajú na dôležité otázky a umožňujú lepšie pochopiť trh so surovinami a chemickými výrobkami a ich trendy.
 ***
 # Graf 1: Najpopulárnejší čas doručenia
 Táto vizualizácia ukazuje najpopulárnejší čas doručenia. Umožňuje určiť, kedy sa tovar najčastejšie dodáva kupujúcemu. Graf ukazuje, že najobľúbenejším termínom dodania je približne jeden mesiac. Tieto údaje môžu byť užitočné pri plánovaní logistiky, tvorbe cenovej stratégie a optimalizácii prevádzkových procesov.
@@ -375,10 +393,15 @@ where tr.DELIVERY_TIMEFRAME is not null
 group by 1
 order by CNT desc;
 ```
-<img width="1347" height="556" alt="graf1" src="https://github.com/user-attachments/assets/dce1049f-bfbd-46c8-8ae4-16bbe87ce856" />
+
+<img width="1347" height="556" alt="graf1" src="https://github.com/user-attachments/assets/dafbf439-a461-420c-abc4-882c848d0be4" />
+
 ***
-# Graf 2: Najpopulárnejší čas doručenia
+
+# Graf 2: Najbežnejšie podmienky zmlúv
+
 Táto vizualizácia zobrazuje najbežnejšie podmienky zmlúv. Z údajov je zrejmé, že najbežnejšou podmienkou zmluvy je FOB. Tieto údaje môžu byť užitočné pre analýzu trhových štandardov, optimalizáciu zmluvných podmienok a prijímanie rozhodnutí v oblasti logistiky a cenotvorby.
+
 ```sql
 select
   tr.TRADE_TERMS,
@@ -390,4 +413,90 @@ where tr.TRADE_TERMS is not null
 group by tr.TRADE_TERMS
 order by CNT desc;
 ```
+
+<img width="1343" height="592" alt="graf2" src="https://github.com/user-attachments/assets/06baaf84-8358-4902-8e49-5d3cf5bc4907" />
+
+# Graf 3: Najbežnejšie meny pri platbe za tovar
+
+Táto vizualizácia ukazuje najbežnejšie meny používané pri platbe za tovar. Pomôže vám pochopiť, ktoré meny zákazníci používajú pri platbe najčastejšie. Ako vidíme, najbežnejšie meny používané pri platbe sú čínsky jüan a americký dolár.  
+
+```sql
+select
+  m.CURRENCY_CODE,
+  count(*) as CNT
+from FACT_PRICE f
+join DIM_METRICS m
+  on m.CURRENCY_ID = f.CURRENCY_ID
+group by
+  m.CURRENCY_CODE,
+  m.CURRENCY
+order by CNT desc;
+```
+
+<img width="1357" height="622" alt="graf3" src="https://github.com/user-attachments/assets/10dfe7c1-14f2-4f33-bf70-f225688d7bb4" />
+
+
+# Graf 4: Najobľúbenejšie regióny pre nákupy(Top 10 regionov)
+
+Táto vizualizácia ukazuje 10 regiónov, v ktorých sa najčastejšie objednávajú tovary. Ako vidíme, najrozšírenejším regiónom je Čína. Táto vizualizácia pomôže identifikovať regióny s najväčšou nákupnou aktivitou, aby bolo možné uprednostniť kľúčové trhy.
+
+```sql
+select
+  l.LOCATION,
+  count(*) as CNT
+from FACT_PRICE f
+join DIM_LOCATION l
+  on l.LOCATION_ID = f.LOCATION_ID
+group by
+  l.LOCATION,
+  l.LOCATION_TYPE
+order by CNT desc
+limit 10;
+```
+
+<img width="1373" height="662" alt="graf4" src="https://github.com/user-attachments/assets/71388bc6-2b90-480a-b69a-c5e3e8baa231" />
+
+
+# Graf 5: Zmeny ceny ropy Brent
+
+Táto vizualizácia ukazuje zmeny ceny ropy za 1 mesiac. Z grafu je vidieť, že cena ropy je nestabilná, stúpa a klesá. Na základe týchto údajov je možné pochopiť trhový trend a volatilitu ropy ako komodity, vďaka čomu je možné prijímať strategické rozhodnutia.
+
+```sql
+select
+  f.CREATED_FOR,
+  f.MID_CHANGE
+from FACT_PRICE f
+where f.SERIES_KEY = 'petchem_1901011'
+  and f.MID_CHANGE is not null
+order by f.CREATED_FOR, f.RELEASED_ON;
+```
+
+<img width="1678" height="695" alt="graf5" src="https://github.com/user-attachments/assets/2c247d53-5682-41e7-b86e-f2fea5281a3e" />
+
+
+# Graf 6: TOP 10 najrizikovejších komodít iba v juanoch (CNY)
+
+Táto vizualizácia ukazuje 10 najrizikovejších komodít na trhu. Napríklad butadién má najvyšší koeficient zmeny ceny. To pomôže spoločnostiam zistiť najrizikovejšie komodity a vypočítať riziká pri ich obchodovaní.
+
+```sql
+select
+    c.COMMODITY_ as COMMODITY,
+    avg(f.ASSESSMENT_MID) as AVG_PRICE_CNY,
+    stddev(f.ASSESSMENT_MID) as STD_PRICE_CNY,
+    stddev(f.ASSESSMENT_MID) / nullif(avg(f.ASSESSMENT_MID), 0) as CV_RISK,
+    count(*) as N_POINTS
+from FACT_PRICE f
+join DIM_COMMODITY c
+  on c.COMMODITY_ID = f.COMMODITY_ID
+join DIM_METRICS m
+  on m.CURRENCY_ID = f.CURRENCY_ID
+where f.ASSESSMENT_MID is not null
+  and m.CURRENCY_CODE = 'CNY'
+group by c.COMMODITY_
+having count(*) >= 10
+order by CV_RISK desc
+limit 10;
+```
+<img width="1388" height="700" alt="graf6" src="https://github.com/user-attachments/assets/e7a5896d-f92d-41fc-b270-103d36415ca5" />
+
 
