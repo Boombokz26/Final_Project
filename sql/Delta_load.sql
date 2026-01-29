@@ -370,7 +370,7 @@ left join DIM_METRICS m
  and m.MEASURE_UNIT = s.measure_unit
  and m.CURRENCY_SYMBOL = s.currency_symbol
  and m.MEASURE_UNIT_SYMBOL = s.measure_unit_symbol
-where 1=0;   -- ключевой трюк: создаёт таблицу, но не грузит данные
+where 1=0; 
 
 insert into FACT_PRICE
 select
