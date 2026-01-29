@@ -369,8 +369,7 @@ left join DIM_METRICS m
   on m.CURRENCY_CODE = s.currency_code
  and m.MEASURE_UNIT = s.measure_unit
  and m.CURRENCY_SYMBOL = s.currency_symbol
- and m.MEASURE_UNIT_SYMBOL = s.measure_unit_symbol
-where 1=0; 
+ and m.MEASURE_UNIT_SYMBOL = s.measure_unit_symbol;
 
 insert into FACT_PRICE
 select
