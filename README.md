@@ -459,7 +459,7 @@ where currency_code is not null
 
 ### 4.3
 
-Dimenzia DIM_SERIES SCD  1
+Dimenzia DIM_SERIES SCD  0
 
 Príklad kódu: 
 
@@ -526,7 +526,7 @@ when not matched then insert (
 
 ### 4.4
 
-Dimenzia DIM_LOCATION 
+Dimenzia DIM_LOCATION SCD 0
 
 ```sql
 create table if not exists DIM_LOCATION (
@@ -552,7 +552,7 @@ where location_id is not null
 
 ### 4.5
 
-Dimenzia DIM_LOGISTIC scd 0
+Dimenzia DIM_LOGISTIC SCD 0
 
 Príklad kódu: 
 
@@ -585,7 +585,7 @@ where factory is not null
 
 ### 4.6
 
-Dimenzia DIM_TRADE scd 0
+Dimenzia DIM_TRADE SCD 0
 
 Príklad kódu:
 
@@ -635,7 +635,7 @@ where trade_terms is not null
 
 ### 4.7
 
-Dimenzia DIM_COMMODITY SCD 1
+Dimenzia DIM_COMMODITY SCD 0
 
 
 
