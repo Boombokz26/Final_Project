@@ -379,7 +379,422 @@ DROP TABLE IF EXISTS chemical_price_assessments_staging;
 ```
 ***
 
-# 4 Vizualizácia dát
+# 4 Delta load
+
+### 4.1
+
+DIM_TIME SCD 0
+
+
+Príklad kódu:
+
+```sql
+create table if not exists DIM_TIME (
+    TIME_ID number primary key,
+    DAY number,
+    MONTH number,
+    MONTH_NAME varchar,
+    QUARTET varchar,
+    YEAR number
+);
+
+insert into DIM_TIME (TIME_ID, DAY, MONTH, MONTH_NAME, QUARTET, YEAR)
+select distinct
+    to_number(to_char(created_for, 'YYYYMMDD')) as TIME_ID,
+    extract(day from created_for)               as DAY,
+    extract(month from created_for)             as MONTH,
+    to_char(created_for, 'MMMM')                as MONTH_NAME,
+    'Q' || extract(quarter from created_for)    as QUARTET,
+    extract(year from created_for)              as YEAR
+    
+from FOX_DB.SHEMA_CHEMICAL_PRICE_ASSESSMENTS_STATING.chemical_price_assessments_staging s
+
+where created_for is not null
+    and not exists (
+    select 1
+    from DIM_TIME t
+    where t.TIME_ID = to_number(to_char(s.created_for,'YYYYMMDD'))
+  );
+
+```
+***
+
+### 4.2
+
+Dimenzia DIM_METRICS SCD 0
+
+Príklad kódu:
+
+```sql
+
+create table if not exists DIM_METRICS (
+      CURRENCY_ID  INT autoincrement start 1 primary key,
+      CURRENCY varchar(100),
+      CURRENCY_CODE varchar(20),
+      CURRENCY_SYMBOL varchar(20),
+      MEASURE_UNIT varchar(50),
+      MEASURE_UNIT_SYMBOL varchar(20)
+);
+
+insert into DIM_METRICS (CURRENCY, CURRENCY_CODE, CURRENCY_SYMBOL, MEASURE_UNIT, MEASURE_UNIT_SYMBOL)
+select distinct
+      currency::varchar(100)           as CURRENCY,
+      currency_code::varchar(20)       as CURRENCY_CODE,
+      currency_symbol::varchar(20)     as CURRENCY_SYMBOL,
+      measure_unit::varchar(50)        as MEASURE_UNIT,
+      measure_unit_symbol::varchar(20) as MEASURE_UNIT_SYMBOL
+from FOX_DB.SHEMA_CHEMICAL_PRICE_ASSESSMENTS_STATING.chemical_price_assessments_staging s
+where currency_code is not null
+  and measure_unit is not null
+  and not exists (
+    select 1
+    from DIM_METRICS d
+    where d.CURRENCY_CODE = s.currency_code::varchar(20)
+      and d.MEASURE_UNIT = s.measure_unit::varchar(50)
+      and d.CURRENCY_SYMBOL = s.currency_symbol::varchar(20)
+      and d.MEASURE_UNIT_SYMBOL = s.measure_unit_symbol::varchar(20)
+      and d.CURRENCY = s.currency::varchar(100)
+  );
+```
+
+### 4.3
+
+Dimenzia DIM_SERIES SCD  1
+
+Príklad kódu: 
+
+```sql
+create table if not exists DIM_SERIES (
+    SERIES_KEY varchar(50) primary key,
+    ORIGINATOR varchar(25),
+    SERIES_NAME varchar,
+    PRICE_ITEM_TYPE varchar(30),
+    PUBLISH_STATUS varchar(30),
+    LAUNCH_DATE date,
+    START_DATE date,
+    END_DATE date,
+    TERMINATED boolean,
+    FREQUENCY varchar(20)
+);
+
+merge into DIM_SERIES t
+using (
+  select
+    series_key::varchar(50)      as SERIES_KEY,
+    originator::varchar(25)      as ORIGINATOR,
+    series_name::varchar         as SERIES_NAME,
+    price_item_type::varchar(30) as PRICE_ITEM_TYPE,
+    publish_status::varchar(30)  as PUBLISH_STATUS,
+    launch_date::date            as LAUNCH_DATE,
+    start_date::date             as START_DATE,
+    end_date::date               as END_DATE,
+    terminated::boolean          as TERMINATED,
+    frequency::varchar(20)       as FREQUENCY
+  from (
+    select s.*,
+           row_number() over (
+             partition by series_key
+             order by released_on desc nulls last, created_for desc nulls last
+           ) as rn
+    from FOX_DB.SHEMA_CHEMICAL_PRICE_ASSESSMENTS_STATING.chemical_price_assessments_staging s
+    where series_key is not null
+  )
+  where rn = 1
+) s
+on t.SERIES_KEY = s.SERIES_KEY
+
+when matched then update set
+    t.ORIGINATOR      = s.ORIGINATOR,
+    t.SERIES_NAME     = s.SERIES_NAME,
+    t.PRICE_ITEM_TYPE = s.PRICE_ITEM_TYPE,
+    t.PUBLISH_STATUS  = s.PUBLISH_STATUS,
+    t.LAUNCH_DATE     = s.LAUNCH_DATE,
+    t.START_DATE      = s.START_DATE,
+    t.END_DATE        = s.END_DATE,
+    t.TERMINATED      = s.TERMINATED,
+    t.FREQUENCY       = s.FREQUENCY
+
+when not matched then insert (
+    SERIES_KEY, ORIGINATOR, SERIES_NAME, PRICE_ITEM_TYPE, PUBLISH_STATUS,
+    LAUNCH_DATE, START_DATE, END_DATE, TERMINATED, FREQUENCY
+) values (
+    s.SERIES_KEY, s.ORIGINATOR, s.SERIES_NAME, s.PRICE_ITEM_TYPE, s.PUBLISH_STATUS,
+    s.LAUNCH_DATE, s.START_DATE, s.END_DATE, s.TERMINATED, s.FREQUENCY
+);
+```
+***
+
+### 4.4
+
+Dimenzia DIM_LOCATION 
+
+```sql
+create table if not exists DIM_LOCATION (
+    LOCATION_ID varchar primary key,
+    LOCATION varchar,
+    LOCATION_TYPE varchar
+);
+
+insert into DIM_LOCATION (LOCATION_ID, LOCATION, LOCATION_TYPE)
+select distinct
+    location_id::varchar      as LOCATION_ID,
+    location::varchar         as LOCATION,
+    location_type::varchar    as LOCATION_TYPE
+from FOX_DB.SHEMA_CHEMICAL_PRICE_ASSESSMENTS_STATING.chemical_price_assessments_staging s
+where location_id is not null
+  and not exists (
+    select 1
+    from DIM_LOCATION d
+    where d.LOCATION_ID = s.location_id::varchar
+  );
+```
+***
+
+### 4.5
+
+Dimenzia DIM_LOGISTIC scd 0
+
+Príklad kódu: 
+
+```sql
+create table if not exists DIM_LOGISTIC (
+    LOGISTIC_ID    INT autoincrement start 1 primary key,
+    FACTORY        varchar(200),
+    TRANSPORT      varchar(100),
+    TRANSPORT_TYPE varchar(100)
+);
+
+insert into DIM_LOGISTIC (FACTORY, TRANSPORT, TRANSPORT_TYPE)
+select distinct
+    factory::varchar(200)        as FACTORY,
+    transport::varchar(100)      as TRANSPORT,
+    transport_type::varchar(100) as TRANSPORT_TYPE
+from FOX_DB.SHEMA_CHEMICAL_PRICE_ASSESSMENTS_STATING.chemical_price_assessments_staging s
+where factory is not null
+  and transport is not null
+  and transport_type is not null
+  and not exists (
+    select 1
+    from DIM_LOGISTIC d
+    where d.FACTORY = s.factory::varchar(200)
+      and d.TRANSPORT = s.transport::varchar(100)
+      and d.TRANSPORT_TYPE = s.transport_type::varchar(100)
+  );
+```
+
+
+### 4.6
+
+Dimenzia DIM_TRADE scd 0
+
+Príklad kódu:
+
+```sql
+create table if not exists DIM_TRADE (
+    TRADE_ID INT autoincrement start 1 primary key,
+    TRADE_TERMS varchar(50),
+    TRADE_TERMS_DESCRIPTION varchar(200),
+    TRANSACTION_TYPE varchar(100),
+    QUOTE_APPROACH varchar(200),
+    QUOTE_MEASUREMENT_STYLE varchar(200),
+    DELIVERY_TIMEFRAME varchar(150),
+    CONTRACT_PERIOD varchar(50),
+    DELTA_TYPE varchar(200)
+);
+
+
+insert into DIM_TRADE (
+  TRADE_TERMS, TRADE_TERMS_DESCRIPTION, TRANSACTION_TYPE,
+  QUOTE_APPROACH, QUOTE_MEASUREMENT_STYLE, DELIVERY_TIMEFRAME,
+  CONTRACT_PERIOD, DELTA_TYPE
+)
+select distinct
+    trade_terms::varchar(50)              as TRADE_TERMS,
+    trade_terms_description::varchar(200) as TRADE_TERMS_DESCRIPTION,
+    transaction_type::varchar(100)        as TRANSACTION_TYPE,
+    quote_approach::varchar(200)          as QUOTE_APPROACH,
+    quote_measurement_style::varchar(200) as QUOTE_MEASUREMENT_STYLE,
+    delivery_timeframe::varchar(150)      as DELIVERY_TIMEFRAME,
+    contract_period::varchar(50)          as CONTRACT_PERIOD,
+    delta_type::varchar(200)              as DELTA_TYPE
+from FOX_DB.SHEMA_CHEMICAL_PRICE_ASSESSMENTS_STATING.chemical_price_assessments_staging s
+where trade_terms is not null
+  and not exists (
+    select 1
+    from DIM_TRADE d
+    where d.TRADE_TERMS = s.trade_terms::varchar(50)
+      and d.TRADE_TERMS_DESCRIPTION = s.trade_terms_description::varchar(200)
+      and d.TRANSACTION_TYPE = s.transaction_type::varchar(100)
+      and d.QUOTE_APPROACH = s.quote_approach::varchar(200)
+      and d.QUOTE_MEASUREMENT_STYLE = s.quote_measurement_style::varchar(200)
+      and d.DELIVERY_TIMEFRAME = s.delivery_timeframe::varchar(150)
+      and d.CONTRACT_PERIOD = s.contract_period::varchar(50)
+      and d.DELTA_TYPE = s.delta_type::varchar(200)
+  );
+```
+
+### 4.7
+
+Dimenzia DIM_COMMODITY SCD 1
+
+
+
+Príklad kódu:
+
+```sql
+
+create table if not exists DIM_COMMODITY (
+    COMMODITY_ID varchar(60) primary key,
+    COMMODITY_ varchar(60),
+    COMMODITY_P1_ID varchar(60),
+    COMMODITY_P1 varchar(60),
+    COMMODITY_P2_ID varchar(60),
+    COMMODITY_P2 varchar(60)
+);
+
+insert into DIM_COMMODITY (COMMODITY_ID, COMMODITY_, COMMODITY_P1_ID, COMMODITY_P1, COMMODITY_P2_ID, COMMODITY_P2)
+select distinct
+    commodity_id::varchar(60),
+    commodity::varchar(60),
+    commodity_p1_id::varchar(60),
+    commodity_p1::varchar(60),
+    commodity_p2_id::varchar(60),
+    commodity_p2::varchar(60)
+from FOX_DB.SHEMA_CHEMICAL_PRICE_ASSESSMENTS_STATING.chemical_price_assessments_staging s
+where commodity_id is not null
+  and not exists (
+    select 1 from DIM_COMMODITY d
+    where d.COMMODITY_ID = s.commodity_id::varchar(60)
+  );
+```
+
+### 4.8
+
+FACT_PRICE 
+Príklad kódu:
+```sql
+create table if not exists FACT_PRICE as
+select
+      s.key::varchar(50)                              as KEY,
+      s.series_key::varchar(50)                       as SERIES_KEY,
+      to_number(to_char(s.created_for,'YYYYMMDD'))    as TIME_ID,
+      s.created_for::date                             as CREATED_FOR,
+      s.released_on::timestamp_ntz                    as RELEASED_ON,
+      s.commodity_id::varchar(60)                     as COMMODITY_ID,
+      s.location_id::varchar                          as LOCATION_ID,
+      lg.LOGISTIC_ID                                  as LOGISTIC_ID,
+      tr.TRADE_ID                                     as TRADE_ID,
+      m.CURRENCY_ID                                   as CURRENCY_ID,
+      s.is_estimated                                  as IS_ESTIMATED,
+      s.assessment_high_precision                     as ASSESSMENT_HIGH_PRECISION,
+      s.assessment_high_delta_precision               as ASSESSMENT_HIGH_DELTA_PRECISION,
+      s.assessment_low_precision                      as ASSESSMENT_LOW_PRECISION,
+      s.assessment_low_delta_precision                as ASSESSMENT_LOW_DELTA_PRECISION,
+      s.mid_precision                                 as MID_PRECISION,
+      s.mid_delta_precision                           as MID_DELTA_PRECISION,
+      s.assessment_low::number(18,5)                  as ASSESSMENT_LOW,
+      s.assessment_low_delta::number(18,5)            as ASSESSMENT_LOW_DELTA,
+      s.assessment_mid::number(18,5)                  as ASSESSMENT_MID,
+      s.assessment_mid_delta::number(18,5)            as ASSESSMENT_MID_DELTA,
+      s.assessment_high::number(18,5)                 as ASSESSMENT_HIGH,
+      s.assessment_high_delta::number(18,5)           as ASSESSMENT_HIGH_DELTA,
+    row_number() over (
+      partition by s.series_key
+      order by s.created_for desc, s.released_on desc
+    ) as RN_IN_SERIES,
+    lag(s.assessment_mid::number(18,5)) over (
+      partition by s.series_key
+      order by s.created_for
+    ) as PREV_MID,
+    (s.assessment_mid::number(18,5)
+     - lag(s.assessment_mid::number(18,5)) over (partition by s.series_key order by s.created_for)
+    ) as MID_CHANGE
+from FOX_DB.SHEMA_CHEMICAL_PRICE_ASSESSMENTS_STATING.chemical_price_assessments_staging s
+left join DIM_LOGISTIC lg
+  on lg.FACTORY = s.factory
+ and lg.TRANSPORT = s.transport
+ and lg.TRANSPORT_TYPE = s.transport_type
+left join DIM_TRADE tr
+  on tr.TRADE_TERMS = s.trade_terms
+ and tr.TRADE_TERMS_DESCRIPTION = s.trade_terms_description
+ and tr.TRANSACTION_TYPE = s.transaction_type
+ and tr.QUOTE_APPROACH = s.quote_approach
+ and tr.QUOTE_MEASUREMENT_STYLE = s.quote_measurement_style
+ and tr.DELIVERY_TIMEFRAME = s.delivery_timeframe
+ and tr.CONTRACT_PERIOD = s.contract_period
+ and tr.DELTA_TYPE = s.delta_type
+left join DIM_METRICS m
+  on m.CURRENCY_CODE = s.currency_code
+ and m.MEASURE_UNIT = s.measure_unit
+ and m.CURRENCY_SYMBOL = s.currency_symbol
+ and m.MEASURE_UNIT_SYMBOL = s.measure_unit_symbol
+where 1=0;   -- ключевой трюк: создаёт таблицу, но не грузит данные
+
+insert into FACT_PRICE
+select
+    s.key::varchar(50)                              as KEY,
+    s.series_key::varchar(50)                       as SERIES_KEY,
+    to_number(to_char(s.created_for,'YYYYMMDD'))    as TIME_ID,
+    s.created_for::date                             as CREATED_FOR,
+    s.released_on::timestamp_ntz                    as RELEASED_ON,
+    s.commodity_id::varchar(60)                     as COMMODITY_ID,
+    s.location_id::varchar                          as LOCATION_ID,
+    lg.LOGISTIC_ID                                  as LOGISTIC_ID,
+    tr.TRADE_ID                                     as TRADE_ID,
+    m.CURRENCY_ID                                   as CURRENCY_ID,
+    s.is_estimated                                  as IS_ESTIMATED,
+    s.assessment_high_precision                     as ASSESSMENT_HIGH_PRECISION,
+    s.assessment_high_delta_precision               as ASSESSMENT_HIGH_DELTA_PRECISION,
+    s.assessment_low_precision                      as ASSESSMENT_LOW_PRECISION,
+    s.assessment_low_delta_precision                as ASSESSMENT_LOW_DELTA_PRECISION,
+    s.mid_precision                                 as MID_PRECISION,
+    s.mid_delta_precision                           as MID_DELTA_PRECISION,
+    s.assessment_low::number(18,5)                  as ASSESSMENT_LOW,
+    s.assessment_low_delta::number(18,5)            as ASSESSMENT_LOW_DELTA,
+    s.assessment_mid::number(18,5)                  as ASSESSMENT_MID,
+    s.assessment_mid_delta::number(18,5)            as ASSESSMENT_MID_DELTA,
+    s.assessment_high::number(18,5)                 as ASSESSMENT_HIGH,
+    s.assessment_high_delta::number(18,5)           as ASSESSMENT_HIGH_DELTA,
+    row_number() over (
+      partition by s.series_key
+      order by s.created_for desc, s.released_on desc
+    ) as RN_IN_SERIES,
+    lag(s.assessment_mid::number(18,5)) over (
+      partition by s.series_key
+      order by s.created_for
+    ) as PREV_MID,
+    (s.assessment_mid::number(18,5)
+     - lag(s.assessment_mid::number(18,5)) over (partition by s.series_key order by s.created_for)
+    ) as MID_CHANGE
+from FOX_DB.SHEMA_CHEMICAL_PRICE_ASSESSMENTS_STATING.chemical_price_assessments_staging s
+left join DIM_LOGISTIC lg
+  on lg.FACTORY = s.factory
+ and lg.TRANSPORT = s.transport
+ and lg.TRANSPORT_TYPE = s.transport_type
+left join DIM_TRADE tr
+  on tr.TRADE_TERMS = s.trade_terms
+ and tr.TRADE_TERMS_DESCRIPTION = s.trade_terms_description
+ and tr.TRANSACTION_TYPE = s.transaction_type
+ and tr.QUOTE_APPROACH = s.quote_approach
+ and tr.QUOTE_MEASUREMENT_STYLE = s.quote_measurement_style
+ and tr.DELIVERY_TIMEFRAME = s.delivery_timeframe
+ and tr.CONTRACT_PERIOD = s.contract_period
+ and tr.DELTA_TYPE = s.delta_type
+left join DIM_METRICS m
+  on m.CURRENCY_CODE = s.currency_code
+ and m.MEASURE_UNIT = s.measure_unit
+ and m.CURRENCY_SYMBOL = s.currency_symbol
+ and m.MEASURE_UNIT_SYMBOL = s.measure_unit_symbol
+where s.key is not null
+  and not exists (
+    select 1
+    from FACT_PRICE f
+    where f.KEY = s.key::varchar(50)
+  );
+```
+
+
+# 5 Vizualizácia dát
 
 Dashboard obsahuje `6 vizualizácií`,ktorý poskytuje základný prehľad kľúčových ukazovateľov a trendov týkajúcich sa surovín a chemických výrobkov. Tieto vizualizácie odpovedajú na dôležité otázky a umožňujú lepšie pochopiť trh so surovinami a chemickými výrobkami a ich trendy.
 ***
