@@ -486,7 +486,7 @@ insert into DIM_SERIES (
   ORIGINATOR, SERIES_NAME, PRICE_ITEM_TYPE, PUBLISH_STATUS,
   LAUNCH_DATE, START_DATE, END_DATE, TERMINATED, FREQUENCY
 )
-select
+select distinct
   s.series_key::varchar(50)          as SERIES_KEY,
   s.released_on::timestamp_ntz       as RELEASED_ON,
   s.originator::varchar(25)          as ORIGINATOR,
@@ -696,6 +696,9 @@ select
      - lag(s.assessment_mid::number(18,5)) over (partition by s.series_key,s.released_on order by s.created_for)
     ) as MID_CHANGE
 from FOX_DB.SHEMA_CHEMICAL_PRICE_ASSESSMENTS_STATING.chemical_price_assessments_staging s
+left join DIM_SERIES ds
+  on ds.SERIES_KEY  = s.series_key::varchar(50)
+ and ds.RELEASED_ON = s.released_on::timestamp_ntz
 left join DIM_LOGISTIC lg
   on lg.FACTORY = s.factory
  and lg.TRANSPORT = s.transport
@@ -723,23 +726,18 @@ select
     to_number(to_char(s.created_for,'YYYYMMDD'))    as TIME_ID,
     s.created_for::date                             as CREATED_FOR,
     s.released_on::timestamp_ntz                    as RELEASED_ON,
-
     s.commodity_id::varchar(60)                     as COMMODITY_ID,
     s.location_id::varchar                          as LOCATION_ID,
-
     lg.LOGISTIC_ID                                  as LOGISTIC_ID,
     tr.TRADE_ID                                     as TRADE_ID,
     m.CURRENCY_ID                                   as CURRENCY_ID,
-
     s.is_estimated                                  as IS_ESTIMATED,
-
     s.assessment_high_precision                     as ASSESSMENT_HIGH_PRECISION,
     s.assessment_high_delta_precision               as ASSESSMENT_HIGH_DELTA_PRECISION,
     s.assessment_low_precision                      as ASSESSMENT_LOW_PRECISION,
     s.assessment_low_delta_precision                as ASSESSMENT_LOW_DELTA_PRECISION,
     s.mid_precision                                 as MID_PRECISION,
     s.mid_delta_precision                           as MID_DELTA_PRECISION,
-
     s.assessment_low::number(18,5)                  as ASSESSMENT_LOW,
     s.assessment_low_delta::number(18,5)            as ASSESSMENT_LOW_DELTA,
     s.assessment_mid::number(18,5)                  as ASSESSMENT_MID,
@@ -748,22 +746,28 @@ select
     s.assessment_high_delta::number(18,5)           as ASSESSMENT_HIGH_DELTA,
 
     row_number() over (
-        partition by s.series_key
-        order by s.created_for desc, s.released_on desc
+    partition by s.series_key, s.released_on
+    order by s.created_for desc, s.released_on desc
     ) as RN_IN_SERIES,
 
     lag(s.assessment_mid::number(18,5)) over (
-        partition by s.series_key
-        order by s.created_for
+    partition by s.series_key, s.released_on
+    order by s.created_for
     ) as PREV_MID,
 
-    s.assessment_mid::number(18,5)
-      - lag(s.assessment_mid::number(18,5)) over (
-            partition by s.series_key
-            order by s.created_for
-        ) as MID_CHANGE
+
+    (s.assessment_mid::number(18,5)
+        - lag(s.assessment_mid::number(18,5)) over (
+      partition by s.series_key, s.released_on
+      order by s.created_for
+     )
+) as MID_CHANGE
 
 from FOX_DB.SHEMA_CHEMICAL_PRICE_ASSESSMENTS_STATING.chemical_price_assessments_staging s
+
+left join DIM_SERIES ds
+  on ds.SERIES_KEY  = s.series_key::varchar(50)
+ and ds.RELEASED_ON = s.released_on::timestamp_ntz
 
 left join DIM_LOGISTIC lg
     on lg.FACTORY = s.factory
@@ -790,8 +794,12 @@ where s.key is not null
   and not exists (
       select 1
       from FACT_PRICE f
-      where f.KEY = s.key::varchar(50)
+      where f.KEY = s.key::varchar(50) and f.RELEASED_ON = s.released_on::timestamp_ntz
   );
+
+
+
+select * from FACT_PRICE;
 ```
 
 
