@@ -465,62 +465,48 @@ Príklad kódu:
 
 ```sql
 create table if not exists DIM_SERIES (
-    SERIES_KEY varchar(50) primary key,
-    ORIGINATOR varchar(25),
-    SERIES_NAME varchar,
-    PRICE_ITEM_TYPE varchar(30),
-    PUBLISH_STATUS varchar(30),
-    LAUNCH_DATE date,
-    START_DATE date,
-    END_DATE date,
-    TERMINATED boolean,
-    FREQUENCY varchar(20)
+  SERIES_KEY   varchar(50) not null,
+  RELEASED_ON  timestamp_ntz not null,
+  ORIGINATOR varchar(25),
+  SERIES_NAME varchar,
+  PRICE_ITEM_TYPE varchar(30),
+  PUBLISH_STATUS varchar(30),
+  LAUNCH_DATE date,
+  START_DATE date,
+  END_DATE date,
+  TERMINATED boolean,
+  FREQUENCY varchar(20),
+
+  primary key (SERIES_KEY, RELEASED_ON)
 );
 
-merge into DIM_SERIES t
-using (
-  select
-    series_key::varchar(50)      as SERIES_KEY,
-    originator::varchar(25)      as ORIGINATOR,
-    series_name::varchar         as SERIES_NAME,
-    price_item_type::varchar(30) as PRICE_ITEM_TYPE,
-    publish_status::varchar(30)  as PUBLISH_STATUS,
-    launch_date::date            as LAUNCH_DATE,
-    start_date::date             as START_DATE,
-    end_date::date               as END_DATE,
-    terminated::boolean          as TERMINATED,
-    frequency::varchar(20)       as FREQUENCY
-  from (
-    select s.*,
-           row_number() over (
-             partition by series_key
-             order by released_on desc nulls last, created_for desc nulls last
-           ) as rn
-    from FOX_DB.SHEMA_CHEMICAL_PRICE_ASSESSMENTS_STATING.chemical_price_assessments_staging s
-    where series_key is not null
-  )
-  where rn = 1
-) s
-on t.SERIES_KEY = s.SERIES_KEY
 
-when matched then update set
-    t.ORIGINATOR      = s.ORIGINATOR,
-    t.SERIES_NAME     = s.SERIES_NAME,
-    t.PRICE_ITEM_TYPE = s.PRICE_ITEM_TYPE,
-    t.PUBLISH_STATUS  = s.PUBLISH_STATUS,
-    t.LAUNCH_DATE     = s.LAUNCH_DATE,
-    t.START_DATE      = s.START_DATE,
-    t.END_DATE        = s.END_DATE,
-    t.TERMINATED      = s.TERMINATED,
-    t.FREQUENCY       = s.FREQUENCY
-
-when not matched then insert (
-    SERIES_KEY, ORIGINATOR, SERIES_NAME, PRICE_ITEM_TYPE, PUBLISH_STATUS,
-    LAUNCH_DATE, START_DATE, END_DATE, TERMINATED, FREQUENCY
-) values (
-    s.SERIES_KEY, s.ORIGINATOR, s.SERIES_NAME, s.PRICE_ITEM_TYPE, s.PUBLISH_STATUS,
-    s.LAUNCH_DATE, s.START_DATE, s.END_DATE, s.TERMINATED, s.FREQUENCY
-);
+insert into DIM_SERIES (
+  SERIES_KEY, RELEASED_ON,
+  ORIGINATOR, SERIES_NAME, PRICE_ITEM_TYPE, PUBLISH_STATUS,
+  LAUNCH_DATE, START_DATE, END_DATE, TERMINATED, FREQUENCY
+)
+select
+  s.series_key::varchar(50)          as SERIES_KEY,
+  s.released_on::timestamp_ntz       as RELEASED_ON,
+  s.originator::varchar(25)          as ORIGINATOR,
+  s.series_name::varchar             as SERIES_NAME,
+  s.price_item_type::varchar(30)     as PRICE_ITEM_TYPE,
+  s.publish_status::varchar(30)      as PUBLISH_STATUS,
+  s.launch_date::date                as LAUNCH_DATE,
+  s.start_date::date                 as START_DATE,
+  s.end_date::date                   as END_DATE,
+  s.terminated::boolean              as TERMINATED,
+  s.frequency::varchar(20)           as FREQUENCY
+from FOX_DB.SHEMA_CHEMICAL_PRICE_ASSESSMENTS_STATING.chemical_price_assessments_staging s
+where s.series_key is not null
+  and s.released_on is not null
+  and not exists (
+    select 1
+    from DIM_SERIES d
+    where d.SERIES_KEY  = s.series_key::varchar(50)
+      and d.RELEASED_ON = s.released_on::timestamp_ntz
+  );
 ```
 ***
 
@@ -699,15 +685,15 @@ select
       s.assessment_high::number(18,5)                 as ASSESSMENT_HIGH,
       s.assessment_high_delta::number(18,5)           as ASSESSMENT_HIGH_DELTA,
     row_number() over (
-      partition by s.series_key
+      partition by s.series_key,s.released_on
       order by s.created_for desc, s.released_on desc
     ) as RN_IN_SERIES,
     lag(s.assessment_mid::number(18,5)) over (
-      partition by s.series_key
+      partition by s.series_key,s.released_on
       order by s.created_for
     ) as PREV_MID,
     (s.assessment_mid::number(18,5)
-     - lag(s.assessment_mid::number(18,5)) over (partition by s.series_key order by s.created_for)
+     - lag(s.assessment_mid::number(18,5)) over (partition by s.series_key,s.released_on order by s.created_for)
     ) as MID_CHANGE
 from FOX_DB.SHEMA_CHEMICAL_PRICE_ASSESSMENTS_STATING.chemical_price_assessments_staging s
 left join DIM_LOGISTIC lg
@@ -737,59 +723,74 @@ select
     to_number(to_char(s.created_for,'YYYYMMDD'))    as TIME_ID,
     s.created_for::date                             as CREATED_FOR,
     s.released_on::timestamp_ntz                    as RELEASED_ON,
+
     s.commodity_id::varchar(60)                     as COMMODITY_ID,
     s.location_id::varchar                          as LOCATION_ID,
+
     lg.LOGISTIC_ID                                  as LOGISTIC_ID,
     tr.TRADE_ID                                     as TRADE_ID,
     m.CURRENCY_ID                                   as CURRENCY_ID,
+
     s.is_estimated                                  as IS_ESTIMATED,
+
     s.assessment_high_precision                     as ASSESSMENT_HIGH_PRECISION,
     s.assessment_high_delta_precision               as ASSESSMENT_HIGH_DELTA_PRECISION,
     s.assessment_low_precision                      as ASSESSMENT_LOW_PRECISION,
     s.assessment_low_delta_precision                as ASSESSMENT_LOW_DELTA_PRECISION,
     s.mid_precision                                 as MID_PRECISION,
     s.mid_delta_precision                           as MID_DELTA_PRECISION,
+
     s.assessment_low::number(18,5)                  as ASSESSMENT_LOW,
     s.assessment_low_delta::number(18,5)            as ASSESSMENT_LOW_DELTA,
     s.assessment_mid::number(18,5)                  as ASSESSMENT_MID,
     s.assessment_mid_delta::number(18,5)            as ASSESSMENT_MID_DELTA,
     s.assessment_high::number(18,5)                 as ASSESSMENT_HIGH,
     s.assessment_high_delta::number(18,5)           as ASSESSMENT_HIGH_DELTA,
+
     row_number() over (
-      partition by s.series_key
-      order by s.created_for desc, s.released_on desc
+        partition by s.series_key
+        order by s.created_for desc, s.released_on desc
     ) as RN_IN_SERIES,
+
     lag(s.assessment_mid::number(18,5)) over (
-      partition by s.series_key
-      order by s.created_for
+        partition by s.series_key
+        order by s.created_for
     ) as PREV_MID,
-    (s.assessment_mid::number(18,5)
-     - lag(s.assessment_mid::number(18,5)) over (partition by s.series_key order by s.created_for)
-    ) as MID_CHANGE
+
+    s.assessment_mid::number(18,5)
+      - lag(s.assessment_mid::number(18,5)) over (
+            partition by s.series_key
+            order by s.created_for
+        ) as MID_CHANGE
+
 from FOX_DB.SHEMA_CHEMICAL_PRICE_ASSESSMENTS_STATING.chemical_price_assessments_staging s
+
 left join DIM_LOGISTIC lg
-  on lg.FACTORY = s.factory
- and lg.TRANSPORT = s.transport
- and lg.TRANSPORT_TYPE = s.transport_type
+    on lg.FACTORY = s.factory
+   and lg.TRANSPORT = s.transport
+   and lg.TRANSPORT_TYPE = s.transport_type
+
 left join DIM_TRADE tr
-  on tr.TRADE_TERMS = s.trade_terms
- and tr.TRADE_TERMS_DESCRIPTION = s.trade_terms_description
- and tr.TRANSACTION_TYPE = s.transaction_type
- and tr.QUOTE_APPROACH = s.quote_approach
- and tr.QUOTE_MEASUREMENT_STYLE = s.quote_measurement_style
- and tr.DELIVERY_TIMEFRAME = s.delivery_timeframe
- and tr.CONTRACT_PERIOD = s.contract_period
- and tr.DELTA_TYPE = s.delta_type
+    on tr.TRADE_TERMS = s.trade_terms
+   and tr.TRADE_TERMS_DESCRIPTION = s.trade_terms_description
+   and tr.TRANSACTION_TYPE = s.transaction_type
+   and tr.QUOTE_APPROACH = s.quote_approach
+   and tr.QUOTE_MEASUREMENT_STYLE = s.quote_measurement_style
+   and tr.DELIVERY_TIMEFRAME = s.delivery_timeframe
+   and tr.CONTRACT_PERIOD = s.contract_period
+   and tr.DELTA_TYPE = s.delta_type
+
 left join DIM_METRICS m
-  on m.CURRENCY_CODE = s.currency_code
- and m.MEASURE_UNIT = s.measure_unit
- and m.CURRENCY_SYMBOL = s.currency_symbol
- and m.MEASURE_UNIT_SYMBOL = s.measure_unit_symbol
+    on m.CURRENCY_CODE = s.currency_code
+   and m.MEASURE_UNIT = s.measure_unit
+   and m.CURRENCY_SYMBOL = s.currency_symbol
+   and m.MEASURE_UNIT_SYMBOL = s.measure_unit_symbol
+
 where s.key is not null
   and not exists (
-    select 1
-    from FACT_PRICE f
-    where f.KEY = s.key::varchar(50)
+      select 1
+      from FACT_PRICE f
+      where f.KEY = s.key::varchar(50)
   );
 ```
 
