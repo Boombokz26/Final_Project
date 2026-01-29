@@ -444,6 +444,7 @@ left join DIM_METRICS m
    and m.MEASURE_UNIT_SYMBOL = s.measure_unit_symbol
 
 where s.key is not null
+where s.released_on is not null
   and not exists (
       select 1
       from FACT_PRICE f
