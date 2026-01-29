@@ -790,15 +790,12 @@ left join DIM_METRICS m
    and m.MEASURE_UNIT_SYMBOL = s.measure_unit_symbol
 
 where s.key is not null
+where s.released_on is not null
   and not exists (
       select 1
       from FACT_PRICE f
       where f.KEY = s.key::varchar(50) and f.RELEASED_ON = s.released_on::timestamp_ntz
   );
-
-
-
-select * from FACT_PRICE;
 ```
 
 
